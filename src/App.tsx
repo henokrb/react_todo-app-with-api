@@ -9,6 +9,7 @@ import * as todoMethods from './api/todos';
 import { ErrorNotification } from './components/Error';
 import { FilterStatus } from './types/FilterStatus';
 import getTodosFilter from './utils/getTodosFilter';
+import { logError } from './utils/logger';
 
 export const App: React.FC = () => {
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -33,14 +34,16 @@ export const App: React.FC = () => {
     }
   }, [isInputDisabled]);
 
+  const handleError = (error: unknown, message: string) => {
+    logError(message, error);
+    setErrorMessage(message);
+  };
+
   useEffect(() => {
     todoMethods
       .getTodos()
       .then(setTodos)
-      .catch(error => {
-        setErrorMessage('Unable to load todos');
-        throw error;
-      });
+      .catch(error => handleError(error, 'Unable to load todos'));
   }, []);
 
   const filteredTodos = useMemo((): Todo[] => {
@@ -76,9 +79,7 @@ export const App: React.FC = () => {
       setTodos(currentTodos => [...currentTodos, newTodo]);
       setTempTodo(null);
     } catch (error) {
-      setErrorMessage('Unable to add a todo');
-      setTempTodo(null);
-      throw error;
+      handleError(error, 'Unable to add a todo');
     } finally {
       setTempTodo(null);
       setInputDisabled(false);
@@ -94,13 +95,50 @@ export const App: React.FC = () => {
 
       setTodos(currentTodos => currentTodos.filter(todo => todo.id !== todoId));
     } catch (error) {
-      setErrorMessage('Unable to delete a todo');
-      throw error;
+      handleError(error, 'Unable to delete a todo');
     } finally {
       setDeletingTodoIds(prev =>
         prev ? prev.filter(id => id !== todoId) : [],
       );
       setInputDisabled(false);
+    }
+  };
+
+  const updateTodo = async (todo: Todo) => {
+    setUpdatingTodoIds(prev => (prev ? [...prev, todo.id] : [todo.id]));
+
+    try {
+      const updatedTodo = await todoMethods.updateTodo(todo);
+
+      setTodos(currentTodos =>
+        currentTodos.map(currentTodo => {
+          if (currentTodo.id === updatedTodo.id) {
+            return updatedTodo;
+          }
+
+          return currentTodo;
+        }),
+      );
+    } catch (error) {
+      handleError(error, 'Unable to update a todo');
+    } finally {
+      setUpdatingTodoIds(prev =>
+        prev ? prev.filter(id => id !== todo.id) : [],
+      );
+    }
+  };
+
+  const toggleTodos = async () => {
+    const targetStatus = !allTodosIsComplited;
+
+    const todosToUpdate = todos.filter(todo => todo.completed !== targetStatus);
+
+    try {
+      for (const todo of todosToUpdate) {
+        await updateTodo({ ...todo, completed: targetStatus });
+      }
+    } catch (error) {
+      handleError(error, 'Unable to update todos');
     }
   };
 
@@ -122,46 +160,6 @@ export const App: React.FC = () => {
       setDeletingTodoIds(null);
       setInputDisabled(false);
     });
-  };
-
-  const updateTodo = async (todo: Todo) => {
-    setUpdatingTodoIds(prev => (prev ? [...prev, todo.id] : [todo.id]));
-
-    try {
-      const updatedTodo = await todoMethods.updateTodo(todo);
-
-      setTodos(currentTodos =>
-        currentTodos.map(currentTodo => {
-          if (currentTodo.id === updatedTodo.id) {
-            return updatedTodo;
-          }
-
-          return currentTodo;
-        }),
-      );
-    } catch (error) {
-      setErrorMessage('Unable to update a todo');
-      throw error;
-    } finally {
-      setUpdatingTodoIds(prev =>
-        prev ? prev.filter(id => id !== todo.id) : [],
-      );
-    }
-  };
-
-  const toggleTodos = async () => {
-    const targetStatus = !allTodosIsComplited;
-
-    const todosToUpdate = todos.filter(todo => todo.completed !== targetStatus);
-
-    try {
-      for (const todo of todosToUpdate) {
-        await updateTodo({ ...todo, completed: targetStatus });
-      }
-    } catch (error) {
-      setErrorMessage('Unable to update a todo');
-      throw error;
-    }
   };
 
   return (
