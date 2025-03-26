@@ -13,4 +13,3 @@ export const UserWarning: React.FC = () => (
     </p>
   </section>
 );
-//new
